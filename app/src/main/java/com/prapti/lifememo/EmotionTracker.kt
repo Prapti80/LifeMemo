@@ -1,3 +1,4 @@
+// EmotionTracker UI
 package com.prapti.lifememo
 
 import android.widget.Toast
@@ -8,7 +9,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -19,16 +19,37 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import co.yml.charts.common.model.PlotType
-import co.yml.charts.ui.piechart.charts.DonutPieChart
-import co.yml.charts.ui.piechart.models.PieChartConfig
-import co.yml.charts.ui.piechart.models.PieChartData
 import com.prapti.lifememo.database.Emotion
 import com.prapti.lifememo.viewmodel.AppViewModelFactory
 import com.prapti.lifememo.viewmodel.EmotionViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
+import android.content.res.Resources
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -153,7 +174,7 @@ fun EmotionTracker(
                 }
             }
             item {
-                val donutChartData = PieChartData(
+                val pieChartData = PieChartData(
                     slices = emotionCounts.map { (emotion, count) ->
                         val color = when (emotion) {
                             "happy" -> Color(0xFF76FF03)
@@ -168,27 +189,19 @@ fun EmotionTracker(
                     },
                     plotType = PlotType.Pie
                 )
-                val donutChartConfig = PieChartConfig(
-                    strokeWidth = 120f,
-                    activeSliceAlpha = .9f,
+                val pieChartConfig = PieChartConfig(
+                    percentVisible = true,
                     isAnimationEnable = true,
-                    sliceLabelTextSize = 20.sp,
-                    sliceLabelTextColor = Color.White,
-                    labelVisible = true,
-                    labelColor = Color.Black,
-                    isEllipsizeEnabled = true,
-                    chartPadding = 25,
-                    labelFontSize = 42.sp,
-                    isClickOnSliceEnabled = true,
-                    showSliceLabels = true
+                    showSliceLabels = false,
+                    animationDuration = 1500
                 )
                 if (emotionCounts.isNotEmpty()) {
-                    DonutPieChart(
+                    PieChart(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(400.dp),
-                        donutChartData,
-                        donutChartConfig
+                            .width(300.dp) // Medium size
+                            .height(300.dp),
+                        pieChartData,
+                        pieChartConfig
                     ) { slice ->
                         // Set the selected emotion for animation
                         selectedEmotion = slice.label
@@ -240,6 +253,7 @@ fun EmotionTracker(
     }
 }
 
+
 @Composable
 fun EmotionSummary(emotionTimes: Pair<Long?, Long?>) {
     val dateFormat = SimpleDateFormat("dd MMM yyyy HH:mm:ss", Locale.getDefault())
@@ -289,11 +303,37 @@ fun AnimatedEmotionLabel(emotion: String, modifier: Modifier) {
     )
 }
 
-data class Slice(
-    val label: String,
-    val value: Float,
-    val color: Color
+data class PieChartData(
+    val slices: List<Slice>,
+    val plotType: PlotType = PlotType.Pie
+) {
+    data class Slice(
+        val label: String,
+        val value: Float,
+        val color: Color
+    )
+}
+
+data class PieChartConfig(
+    val strokeWidth: Float = 0f,
+    val activeSliceAlpha: Float = 1f,
+    val isAnimationEnable: Boolean,
+    val sliceLabelTextSize: TextUnit = 16.sp,
+    val sliceLabelTextColor: Color = Color.Black,
+    val labelVisible: Boolean = true,
+    val labelColor: Color = Color.Black,
+    val isEllipsizeEnabled: Boolean = false,
+    val chartPadding: Int = 8,
+    val labelFontSize: TextUnit = 12.sp,
+    val isClickOnSliceEnabled: Boolean = true,
+    val showSliceLabels: Boolean,
+    val percentVisible: Boolean,
+    val animationDuration: Int
 )
+
+enum class PlotType {
+    Pie
+}
 
 fun getEmoji(emotion: String): String {
     return when (emotion) {
@@ -306,3 +346,107 @@ fun getEmoji(emotion: String): String {
         else -> "❓"
     }
 }
+@Composable
+fun PieChart(
+    modifier: Modifier = Modifier,
+    data: PieChartData,
+    config: PieChartConfig,
+    onSliceClick: (PieChartData.Slice) -> Unit = {}
+) {
+    val total = data.slices.sumOf { it.value.toDouble() }.toFloat()
+    var startAngle = 0f
+    val radius = 150.dp.toPx() // Medium size radius
+
+    Box(
+        modifier = modifier
+            .background(Color.White)
+            .padding(horizontal = 50.dp)
+            .pointerInput(Unit) {
+                detectTapGestures { offset ->
+                    // Handle slice click events
+                    var currentStartAngle = 0f
+                    for (slice in data.slices) {
+                        val sweepAngle = (slice.value / total) * 360f
+                        val bounds = Rect(
+                            offset = Offset.Zero,
+                            size = Size(300.dp.toPx(), 300.dp.toPx())
+                        )
+                        if (isPointInArc(bounds, offset, currentStartAngle, sweepAngle)) {
+                            onSliceClick(slice)
+                            break
+                        }
+                        currentStartAngle += sweepAngle
+                    }
+                }
+            }
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            data.slices.forEach { slice ->
+                val sweepAngle = (slice.value / total) * 360f
+                drawArc(
+                    color = slice.color,
+                    startAngle = startAngle,
+                    sweepAngle = sweepAngle,
+                    useCenter = true,
+                    size = Size(radius * 2, radius * 2)
+                )
+                startAngle += sweepAngle
+            }
+        }
+
+        if (config.percentVisible) {
+            var currentStartAngle = 0f
+            data.slices.forEach { slice ->
+                val sweepAngle = (slice.value / total) * 360f
+                val percentage = (slice.value / total) * 100
+                val angle = currentStartAngle + (sweepAngle / 2)
+                val centerX = (radius + radius * 0.7f * cos(Math.toRadians(angle.toDouble()))).toFloat()
+                val centerY = (radius + radius * 0.7f * sin(Math.toRadians(angle.toDouble()))).toFloat()
+
+                BasicText(
+                    text = "${percentage.toInt()}%",
+                    style = TextStyle(
+                        color = Color.Black,
+                        fontSize = config.sliceLabelTextSize,
+                        textAlign = TextAlign.Center
+                    ),
+                    modifier = Modifier
+                        .offset(centerX.toDp(), centerY.toDp())
+                        .padding(4.dp)
+                )
+
+                currentStartAngle += sweepAngle
+            }
+        }
+    }
+}
+
+fun isPointInArc(bounds: Rect, point: Offset, startAngle: Float, sweepAngle: Float): Boolean {
+    val centerX = bounds.center.x
+    val centerY = bounds.center.y
+    val radius = bounds.width / 2
+
+    val dx = point.x - centerX
+    val dy = point.y - centerY
+
+    val distance = sqrt(dx * dx + dy * dy)
+
+    if (distance > radius) {
+        return false
+    }
+
+    val angle = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
+    val normalizedAngle = (angle + 360) % 360
+
+    val start = (startAngle + 360) % 360
+    val end = (start + sweepAngle) % 360
+
+    return if (start < end) {
+        normalizedAngle in start..end
+    } else {
+        normalizedAngle in start..360f || normalizedAngle in 0f..end
+    }
+}
+
+fun Float.toDp(): Dp = (this / Resources.getSystem().displayMetrics.density).dp
+fun Dp.toPx(): Float = (this.value * Resources.getSystem().displayMetrics.density)
