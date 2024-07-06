@@ -1,5 +1,6 @@
 package com.prapti.lifememo
 
+import android.content.Context
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -27,6 +28,24 @@ import coil.compose.rememberImagePainter
 import coil.annotation.ExperimentalCoilApi
 import com.prapti.lifememo.database.JournalEntry
 import com.prapti.lifememo.viewmodel.JournalViewModel
+import java.io.File
+import java.io.FileOutputStream
+import java.io.InputStream
+
+fun saveImageToInternalStorage(context: Context, imageUri: Uri): String? {
+    return try {
+        val inputStream: InputStream? = context.contentResolver.openInputStream(imageUri)
+        val imageFile = File(context.filesDir, "${System.currentTimeMillis()}.jpg")
+        val outputStream = FileOutputStream(imageFile)
+        inputStream?.copyTo(outputStream)
+        inputStream?.close()
+        outputStream.close()
+        imageFile.absolutePath
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalCoilApi::class)
 @Composable
@@ -35,12 +54,12 @@ fun AddEntryDialog(onDismiss: () -> Unit, onSave: (String, String, Long, String?
     var content by remember { mutableStateOf("") }
     var selectedColor by remember { mutableLongStateOf(Color.Yellow.toArgb().toLong()) }
     val context = LocalContext.current
-    var selectedImageUri by remember { mutableStateOf<String?>(null) }
+    var selectedImagePath by remember { mutableStateOf<String?>(null) }
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri: Uri? ->
-            selectedImageUri = uri.toString()
+            selectedImagePath = uri?.let { saveImageToInternalStorage(context, it) }
         }
     )
 
@@ -97,9 +116,9 @@ fun AddEntryDialog(onDismiss: () -> Unit, onSave: (String, String, Long, String?
                 Button(onClick = { launcher.launch("image/*") }) {
                     Text("Select Image")
                 }
-                selectedImageUri?.let {
+                selectedImagePath?.let {
                     Image(
-                        painter = rememberImagePainter(it),
+                        painter = rememberImagePainter(File(it)),
                         contentDescription = null,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -111,7 +130,7 @@ fun AddEntryDialog(onDismiss: () -> Unit, onSave: (String, String, Long, String?
                 Button(
                     onClick = {
                         if (title.isNotEmpty() && content.isNotEmpty()) {
-                            onSave(title, content, selectedColor, selectedImageUri)
+                            onSave(title, content, selectedColor, selectedImagePath)
                             onDismiss()
                         } else {
                             Toast.makeText(context, "Please fill in all fields", Toast.LENGTH_SHORT).show()
@@ -217,12 +236,12 @@ fun DetailEntryDialog(entry: JournalEntry, onDismiss: () -> Unit, onSave: (Journ
     var title by remember { mutableStateOf(entry.title) }
     var content by remember { mutableStateOf(entry.content) }
     val context = LocalContext.current
-    var selectedImageUri by remember { mutableStateOf<String?>(entry.imageUris) }
+    var selectedImagePath by remember { mutableStateOf<String?>(entry.imageUris) }
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri: Uri? ->
-            selectedImageUri = uri.toString()
+            selectedImagePath = uri?.let { saveImageToInternalStorage(context, it) }
         }
     )
 
@@ -255,21 +274,31 @@ fun DetailEntryDialog(entry: JournalEntry, onDismiss: () -> Unit, onSave: (Journ
                 Button(onClick = { launcher.launch("image/*") }) {
                     Text("Select Image")
                 }
-                selectedImageUri?.let {
-                    Image(
-                        painter = rememberImagePainter(it),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(8.dp)
-                            .height(200.dp)
-                    )
+                selectedImagePath?.let {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Image(
+                            painter = rememberImagePainter(File(it)),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(8.dp)
+                                .height(200.dp)
+                        )
+                        IconButton(
+                            onClick = { selectedImagePath = null },
+                            modifier = Modifier.padding(8.dp)
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete Image")
+                        }
+                    }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
                     onClick = {
                         if (title.isNotEmpty() && content.isNotEmpty()) {
-                            val updatedEntry = entry.copy(title = title, content = content, imageUris = selectedImageUri)
+                            val updatedEntry = entry.copy(title = title, content = content, imageUris = selectedImagePath)
                             onSave(updatedEntry)
                             onDismiss()
                         } else {
