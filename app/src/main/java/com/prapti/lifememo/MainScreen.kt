@@ -86,7 +86,7 @@ fun HomeScreen(navController: NavController) {
                 Spacer(modifier = Modifier.height(16.dp))
 
                 ToolButton(
-                    text = "Note journal",
+                    text = "Note Journal",
                     backgroundColor = Color(0xFF667BC6),
                     onClick = { navController.navigate("journal_app") }
                 )

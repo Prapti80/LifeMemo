@@ -62,7 +62,7 @@ fun EmotionTracker(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // State to hold the currently selected emotion for animation
+    // State to hold the currently selected emotio.n for animation
     var selectedEmotion by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
@@ -206,8 +206,6 @@ fun EmotionTracker(
                         // Set the selected emotion for animation
                         selectedEmotion = slice.label
                     }
-                } else {
-                    Text(text = "No emotion data found")
                 }
             }
 
@@ -233,7 +231,7 @@ fun EmotionTracker(
                     },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Refresh Data")
+                        Text("Clear Data")
                     }
                 } else {
                     Text(text = "")
@@ -241,15 +239,7 @@ fun EmotionTracker(
             }
         }
 
-        // Animated display of selected emotion
-        selectedEmotion?.let { emotion ->
-            AnimatedEmotionLabel(
-                emotion = emotion,
-                modifier = Modifier
-                    .padding(16.dp)
-                    .background(Color.LightGray)
-            )
-        }
+
     }
 }
 
@@ -290,18 +280,7 @@ fun EmojiButton(emoji: String, backgroundColor: Color, onClick: () -> Unit) {
     }
 }
 
-@Composable
-fun AnimatedEmotionLabel(emotion: String, modifier: Modifier) {
-    // Example animation
-    Text(
-        text = emotion,
-        fontSize = 24.sp,
-        color = Color.Black,
-        modifier = modifier
-            .padding(16.dp)
-            .animateContentSize() // Animates the size change
-    )
-}
+
 
 data class PieChartData(
     val slices: List<Slice>,
